@@ -1,0 +1,103 @@
+﻿@model PekMekanikEtiket.Models.EtiketModel
+
+@{
+    string L(string alan) => (alan, Model.Dil) switch {
+        ("parcakodu", "English") => "Part No:",
+        ("parcaadi",  "English") => "Part Name:",
+        ("adet",      "English") => "Qty:",
+        ("koli",      "English") => "Box:",
+        ("tarih",     "English") => "Date:",
+        ("parcakodu", "Deutsch") => "Teilenr.:",
+        ("parcaadi",  "Deutsch") => "Teilename:",
+        ("adet",      "Deutsch") => "Menge:",
+        ("koli",      "Deutsch") => "Karton:",
+        ("tarih",     "Deutsch") => "Datum:",
+        _ => alan switch {
+            "parcakodu" => "Parça Kodu:",
+            "parcaadi"  => "Parça Adı:",
+            "adet"      => "Adet:",
+            "koli"      => "Koli:",
+            "tarih"     => "Tarih:",
+            _ => alan
+        }
+    };
+}
+
+<style>
+    /* KÜÇÜK ETİKET */
+    .labels-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 4px;
+    }
+    .small-label {
+        border: 1px solid #444;
+        padding: 5px 7px;
+        height: 108px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        font-size: 10.5px;
+        box-sizing: border-box;
+    }
+    .small-label .logo-wrap { text-align: center; height: 26px; }
+    .small-label .logo-wrap img { max-height: 24px; max-width: 100%; object-fit: contain; }
+    .small-label .rl { display: flex; gap: 4px; }
+    .small-label .rl b { white-space: nowrap; }
+
+    /* BÜYÜK ETİKET */
+    .big-label {
+        border: 1px solid #444;
+        padding: 16px;
+        margin-bottom: 0;
+        height: 265px; /* ekranda görsel orantı */
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-size: 14px;
+        box-sizing: border-box;
+    }
+    .big-label .logo-wrap { text-align: center; }
+    .big-label .logo-wrap img { max-height: 55px; max-width: 220px; object-fit: contain; }
+    .big-label .rl { display: flex; gap: 8px; }
+    .big-label .rl b { min-width: 110px; }
+</style>
+
+@if (Model.EtiketTipi == "Küçük")
+{
+    <div class="labels-grid">
+        @for (int i = 1; i <= Model.KoliSayisi; i++)
+        {
+            int adet = (Model.KoliAdetleri != null && Model.KoliAdetleri.Count >= i)
+                ? Model.KoliAdetleri[i - 1] : Model.Adet;
+
+            <div class="small-label">
+                <div class="logo-wrap"><img src="/logo2.jpeg" /></div>
+                <div class="rl"><b>@L("parcakodu")</b> @Model.ParcaKodu</div>
+                <div class="rl"><b>@L("parcaadi")</b> @Model.ParcaAdi</div>
+                <div class="rl"><b>@L("adet")</b> @adet</div>
+                <div class="rl"><b>@L("koli")</b> @i / @Model.KoliSayisi</div>
+                <div class="rl"><b>@L("tarih")</b> @Model.SiparisNo</div>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div>
+        @for (int i = 1; i <= Model.KoliSayisi; i++)
+        {
+            int adet = (Model.KoliAdetleri != null && Model.KoliAdetleri.Count >= i)
+                ? Model.KoliAdetleri[i - 1] : Model.Adet;
+
+            <div class="big-label">
+                <div class="logo-wrap"><img src="/logo2.jpeg" /></div>
+                <div class="rl"><b>@L("parcakodu")</b> @Model.ParcaKodu</div>
+                <div class="rl"><b>@L("parcaadi")</b> @Model.ParcaAdi</div>
+                <div class="rl"><b>@L("adet")</b> @adet</div>
+                <div class="rl"><b>@L("koli")</b> @i / @Model.KoliSayisi</div>
+                <div class="rl"><b>@L("tarih")</b> @Model.SiparisNo</div>
+            </div>
+        }
+    </div>
+}

@@ -1,0 +1,201 @@
+﻿@model PekMekanikEtiket.Models.EtiketModel
+@using System.Text.Json
+@{
+    string L(string alan) => (alan, Model.Dil) switch {
+        ("parcakodu", "English") => "Part No:", ("parcaadi", "English") => "Part Name:",
+        ("adet", "English") => "Qty:", ("koli", "English") => "Box:", ("tarih", "English") => "Order No:",
+        ("parcakodu", "Deutsch") => "Teilenr.:", ("parcaadi", "Deutsch") => "Teilename:",
+        ("adet", "Deutsch") => "Menge:", ("koli", "Deutsch") => "Karton:", ("tarih", "Deutsch") => "Auftr.Nr:",
+        _ => alan switch {
+            "parcakodu" => "Parça Kodu:", "parcaadi" => "Parça Adı:", "adet" => "Adet:",
+            "koli" => "Koli:", "tarih" => "Sipariş No:", _ => alan
+        }
+    };
+
+    string GoselGetir(int i) {
+        if (Model.FotografSecim == "ayni" && !string.IsNullOrEmpty(Model.AyniFotografBase64))
+            return Model.AyniFotografBase64;
+        if (Model.FotografSecim == "ayri" && Model.KoliFotografBase64.ContainsKey(i))
+            return Model.KoliFotografBase64[i];
+        return null;
+    }
+
+    bool buyuk = Model.EtiketTipi == "Büyük";
+
+    // px -> mm dönüşüm sabiti (editör scale = 3.78 px/mm)
+    const double PX_TO_MM = 1.0 / 3.78;
+    // px font-size -> pt: 1px = 0.75pt
+    const double PX_TO_PT = 0.75;
+
+    // Layout parse
+    List<JsonElement> layout = new();
+    if (!string.IsNullOrEmpty(Model.LayoutJson)) {
+        try { layout = JsonSerializer.Deserialize<List<JsonElement>>(Model.LayoutJson) ?? new(); } catch { }
+    }
+}
+
+<style>
+    .prev-sayfa {
+        width: 210mm;
+        margin: 0 auto 8mm auto;
+        background: white;
+        box-shadow: 0 0 4px rgba(0,0,0,0.15);
+        box-sizing: border-box;
+        page-break-after: always;
+    }
+    .kucuk-grid {
+        padding: 15.15mm 5.9mm;
+        display: grid;
+        grid-template-columns: 99.1mm 99.1mm;
+        grid-auto-rows: 38.1mm;
+        gap: 0;
+    }
+    .buyuk-grid {
+        padding: 0;
+        display: grid;
+        grid-template-columns: 210mm;
+        grid-auto-rows: 99mm;
+        gap: 0;
+    }
+    .etiket-kutu {
+        position: relative;
+        overflow: hidden;
+        box-sizing: border-box;
+    }
+    .etiket-el {
+        position: absolute;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        box-sizing: border-box;
+    }
+    .etiket-el img { width: 100%; height: 100%; object-fit: contain; }
+    .etiket-el span {
+        width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        line-height: 1.2;
+    }
+    .varsayilan-icerik {
+        width: 100%; height: 100%;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: flex-start;
+        padding: 2mm; box-sizing: border-box;
+    }
+    .varsayilan-icerik img {
+        max-height: @(buyuk ? "22mm" : "10mm");
+        max-width: @(buyuk ? "170mm" : "70mm");
+        object-fit: contain; margin-bottom: 1mm;
+    }
+    .varsayilan-icerik .sline {
+        font-size: @(buyuk ? "14pt" : "7.4pt");
+        font-weight: 700; text-align: center;
+        line-height: 1.3; white-space: nowrap;
+    }
+    @@media print {
+        body { margin: 0; }
+        .prev-sayfa { box-shadow: none; margin: 0; page-break-after: always; }
+    }
+</style>
+
+@{
+    int koliSayisi = Model.KoliSayisi;
+    int sayfaBasiEtiket = buyuk ? 3 : 14;
+    int sayfaSayisi = (int)Math.Ceiling((double)koliSayisi / sayfaBasiEtiket);
+}
+
+@for (int s = 0; s < sayfaSayisi; s++)
+{
+    int baslangic = s * sayfaBasiEtiket + 1;
+    int bitis = Math.Min((s + 1) * sayfaBasiEtiket, koliSayisi);
+
+    <div class="prev-sayfa">
+        <div class="@(buyuk ? "buyuk-grid" : "kucuk-grid")">
+            @for (int i = baslangic; i <= bitis; i++)
+            {
+                int adet = (Model.KoliAdetleri != null && Model.KoliAdetleri.Count >= i)
+                    ? Model.KoliAdetleri[i - 1] : Model.Adet;
+                var gorsel = GoselGetir(i);
+                int koliNo = i;
+                double w = buyuk ? 210.0 : 99.1;
+                double h = buyuk ? 99.0 : 38.1;
+
+                <div class="etiket-kutu" style="width:@(w)mm;height:@(h)mm;" data-koli="@i">
+                    @if (layout.Any())
+                    {
+                        @foreach (JsonElement el in layout.OrderBy(e => e.TryGetProperty("zIndex", out var z) ? z.GetInt32() : 0))
+                        {
+                            string type = el.GetProperty("type").GetString();
+                            double x = el.GetProperty("x").GetDouble();
+                            double y = el.GetProperty("y").GetDouble();
+                            double ew = el.GetProperty("w").GetDouble();
+                            double eh = el.GetProperty("h").GetDouble();
+                            double fsPx = el.GetProperty("fontSize").GetDouble();
+                            string fw = el.TryGetProperty("fontWeight", out var fwp) ? fwp.GetString() : "normal";
+                            string fi = el.TryGetProperty("fontStyle", out var fip) ? fip.GetString() : "normal";
+                            string ta = el.TryGetProperty("textAlign", out var tap) ? tap.GetString() : "left";
+                            string txt = el.TryGetProperty("text", out var txtp) ? txtp.GetString() : "";
+
+                            // DÜZELTİLDİ: px -> mm dönüşümü (SCALE = 3.78 px/mm)
+                            double xmm = x * PX_TO_MM;
+                            double ymm = y * PX_TO_MM;
+                            double wmm = ew * PX_TO_MM;
+                            double hmm = eh * PX_TO_MM;
+
+                            // DÜZELTİLDİ: font-size px -> pt (1px = 0.75pt)
+                            double fsPt = fsPx * PX_TO_PT;
+
+                            txt = txt
+                                .Replace("{parcakodu}", Model.ParcaKodu)
+                                .Replace("{parcaadi}", Model.ParcaAdi)
+                                .Replace("{adet}", adet.ToString())
+                                .Replace("{koli}", koliNo + "/" + Model.KoliSayisi)
+                                .Replace("{tarih}", Model.SiparisNo);
+                               
+
+                            // Eleman etiket sınırı dışına taşıyorsa gösterme
+                            bool gorunur = (xmm < w) && (ymm < h) && (xmm + wmm > 0) && (ymm + hmm > 0);
+
+                            if (gorunur)
+                            {
+                                // Kenar taşmasını kırp
+                                double gxmm = Math.Max(0, xmm);
+                                double gymm = Math.Max(0, ymm);
+                                double gwmm = Math.Min(wmm, w - gxmm);
+                                double ghmm = Math.Min(hmm, h - gymm);
+
+                                <div class="etiket-el" style="left:@(gxmm.ToString("F3", System.Globalization.CultureInfo.InvariantCulture))mm;top:@(gymm.ToString("F3", System.Globalization.CultureInfo.InvariantCulture))mm;width:@(gwmm.ToString("F3", System.Globalization.CultureInfo.InvariantCulture))mm;height:@(ghmm.ToString("F3", System.Globalization.CultureInfo.InvariantCulture))mm;">
+                                    @if (type == "text")
+                                    {
+                                        <span style="font-size:@(fsPt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))pt;font-weight:@fw;font-style:@fi;text-align:@ta;display:block;">@txt</span>
+                                    }
+                                    else if (type == "logo" && Model.LogoGoster)
+                                    {
+                                        <img src="/logo2.jpeg" alt="Logo" />
+                                    }
+                                    else if (type == "foto" && gorsel != null)
+                                    {
+                                        <img src="@gorsel" alt="Ürün Fotoğrafı" />
+                                    }
+                                </div>
+                            }
+                        }
+                    }
+                    else
+                    {
+                        <div class="varsayilan-icerik">
+                            @if (Model.LogoGoster) { <img src="/logo2.jpeg" alt="Logo" /> }
+                            @if (gorsel != null) { <img src="@gorsel" alt="Ürün Fotoğrafı" /> }
+                            <div class="sline">@L("parcakodu") @Model.ParcaKodu</div>
+                            <div class="sline">@L("parcaadi") @Model.ParcaAdi</div>
+                            <div class="sline">@L("adet") @adet</div>
+                            <div class="sline">@L("koli") @koliNo / @Model.KoliSayisi</div>
+                                <div class="sline">@L("tarih") @Model.SiparisNo</div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}

@@ -1,0 +1,22 @@
+﻿@model PekMekanikEtiket.Models.EtiketModel
+
+<div class="container mt-5">
+
+    <h2>Etiketler</h2>
+
+    @for (int i = 1; i <= Model.KoliSayisi; i++)
+    {
+        <div style="border:1px solid black; padding:15px; margin-bottom:10px; width:400px;">
+
+            <h4>FİRMA LOGO</h4>
+
+            <b>Parça Kodu:</b> @Model.ParcaKodu <br />
+            <b>Parça Adı:</b> @Model.ParcaAdi <br />
+            <b>Adet:</b> @Model.Adet <br />
+            <b>Koli:</b> @i / @Model.KoliSayisi <br />
+            <b>Tarih:</b> @DateTime.Now.ToShortDateString()
+
+        </div>
+    }
+
+</div>
