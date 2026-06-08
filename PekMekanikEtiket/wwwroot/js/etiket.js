@@ -579,3 +579,8 @@ function uygulaSecili() {
 }
 
 function duzenleKaydet() { uygulaTumu(); }
+
+// Sayfa yüklenince grid oluştur
+document.addEventListener("DOMContentLoaded", function () {
+    guncelleKoliGrid();
+});
