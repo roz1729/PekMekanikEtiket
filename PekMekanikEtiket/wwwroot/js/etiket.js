@@ -17,25 +17,29 @@ function fotografSecimDegisti() {
 }
 function guncelleKoliGrid() {
     var k = parseInt(document.getElementById("koliSayisi").value);
-    var toplamAdet = parseInt(document.getElementById("adet").value);
+    var toplamAdet = parseInt(document.getElementById("adet").value) || 0;
     var fs = document.getElementById("fotografSecim").value;
-    var alan = document.getElementById("koliGrid");  
+    var alan = document.getElementById("koliGrid");
     alan.innerHTML = "";
     if (isNaN(k) || k <= 0) return;
-    if (isNaN(toplamAdet) || toplamAdet <= 0) return; // adet girilmemişse dur
 
-    var koliAdeti = Math.floor(toplamAdet / k);
+    var koliAdeti = k > 0 ? Math.floor(toplamAdet / k) : 0;
     var kalan = toplamAdet - (koliAdeti * k);
 
     var html = "<table class='table table-bordered table-sm'><thead><tr><th>Koli No</th><th>Adet</th>";
     if (fs === "ayri") html += "<th>Fotoğraf</th>";
     html += "</tr></thead><tbody>";
+
     for (var i = 1; i <= k; i++) {
-        var buKoliAdet = (i === k) ? koliAdeti + kalan : koliAdeti;
-        html += "<tr><td>" + i + "</td><td><input type='number' name='KoliAdetleri' value='" + buKoliAdet + "' class='form-control form-control-sm'/></td>";
-        if (fs === "ayri") html += "<td><input type='file' id='koliResim_" + i + "' accept='image/*' class='form-control form-control-sm'/></td>";
+        var buKoliAdet = (i === k) ? (koliAdeti + kalan) : koliAdeti;
+        html += "<tr><td>" + i + "</td>";
+        html += "<td><input type='number' name='KoliAdetleri' value='" + buKoliAdet + "' class='form-control form-control-sm'/></td>";
+        if (fs === "ayri") {
+            html += "<td><input type='file' id='koliResim_" + i + "' accept='image/*' class='form-control form-control-sm'/></td>";
+        }
         html += "</tr>";
     }
+
     html += "</tbody></table>";
     alan.innerHTML = html;
 }
