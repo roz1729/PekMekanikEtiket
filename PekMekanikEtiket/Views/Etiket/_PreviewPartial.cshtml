@@ -68,13 +68,15 @@
     }
 
     .buyuk-grid {
-        padding: 0;
+        padding: 10mm 0;
         display: grid;
         grid-template-columns: 210mm;
-        grid-template-rows: repeat(3, 99mm);
+        grid-auto-rows: calc((297mm - 20mm) / 3);
         gap: 0;
         height: 297mm;
+        box-sizing: border-box;
     }
+
     .etiket-kutu { position: relative; overflow: hidden; box-sizing: border-box; }
     .etiket-el {
         position: absolute; overflow: hidden;
