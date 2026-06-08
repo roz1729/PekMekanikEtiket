@@ -89,10 +89,14 @@ function formDegerleriniAl() {
         koliSayisi: parseInt(document.getElementById("koliSayisi").value) || 1,
         koliAdetleri: koliAdetleri,
         tarih: (function () {
-            var t = document.querySelector('[name="Tarih"]').value;
-            if (!t) return new Date().toLocaleDateString('tr-TR');
-            var p = t.split('-');
-            return p[2] + '.' + p[1] + '.' + p[0];
+            var tarihEl = document.querySelector('[name="Tarih"]');
+            var siparisEl = document.querySelector('[name="SiparisNo"]');
+            if (tarihEl) {
+                var t = tarihEl.value;
+                if (t) { var p = t.split('-'); return p[2] + '.' + p[1] + '.' + p[0]; }
+            }
+            if (siparisEl) return siparisEl.value || '';
+            return '';
         })()
     };
 }
