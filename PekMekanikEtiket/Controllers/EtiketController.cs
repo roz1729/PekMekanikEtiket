@@ -31,8 +31,9 @@ namespace PekMekanikEtiket.Controllers
         private void DoldurModel(EtiketModel model, List<int> KoliAdetleri, IFormCollection form)
         {
             model.KoliAdetleri = KoliAdetleri;
-            // LogoGoster: layout'ta logo elemanı varsa her zaman true
             model.LogoGoster = form["LogoGoster"] == "true" ||
+                               (!string.IsNullOrEmpty(form["KoliLayoutlariJson"]) &&
+                                form["KoliLayoutlariJson"].ToString().Contains("\"logo\"")) ||
                                (!string.IsNullOrEmpty(form["LayoutJson"]) &&
                                 form["LayoutJson"].ToString().Contains("\"logo\""));
             model.FotografSecim = form["FotografSecim"];
@@ -48,19 +49,18 @@ namespace PekMekanikEtiket.Controllers
             }
         }
 
-
-
-
-
-
-
         private byte[] OlusturPdf(EtiketModel model)
         {
             QuestPDF.Settings.License = LicenseType.Community;
             bool buyuk = model.EtiketTipi == "Büyük";
 
-            const float A4_H = 841.890f;
-            float etiketH = buyuk ? (A4_H / 3f) : (A4_H - 2 * 42.9f) / 7f;
+            const float A4_H = 841.89f;
+            // Editör px -> PDF pt: 1px = 0.75pt (çünkü 1px=1/96inch, 1pt=1/72inch → 72/96=0.75)
+            const float PX_TO_PT = 0.75f;
+
+            float etiketHpt = buyuk
+                ? A4_H / 3f
+                : (A4_H - 2f * 15.15f * 2.8346f) / 7f;
 
             byte[] logoBytes = null;
             if (model.LogoGoster)
@@ -81,19 +81,12 @@ namespace PekMekanikEtiket.Controllers
                 return Convert.FromBase64String(parts.Length > 1 ? parts[1] : parts[0]);
             }
 
-            // Genel layout (geriye dönük uyumluluk)
-            List<LayoutEl> layout = new();
+            List<LayoutEl> genelLayout = new();
             if (!string.IsNullOrEmpty(model.LayoutJson))
-            {
-                try { layout = JsonSerializer.Deserialize<List<LayoutEl>>(model.LayoutJson) ?? new(); }
-                catch { }
-            }
-            var sortedLayout = layout.OrderBy(e => e.zIndex).ToList();
+                try { genelLayout = JsonSerializer.Deserialize<List<LayoutEl>>(model.LayoutJson) ?? new(); } catch { }
 
-            // Her koli için ayrı layout
             Dictionary<int, List<LayoutEl>> koliLayoutlari = new();
             if (!string.IsNullOrEmpty(model.KoliLayoutlariJson))
-            {
                 try
                 {
                     var raw = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(model.KoliLayoutlariJson);
@@ -103,76 +96,19 @@ namespace PekMekanikEtiket.Controllers
                                 koliLayoutlari[k] = JsonSerializer.Deserialize<List<LayoutEl>>(kv.Value.GetRawText()) ?? new();
                 }
                 catch { }
-            }
 
             List<LayoutEl> GetKoliLayout(int i) =>
                 koliLayoutlari.ContainsKey(i) ? koliLayoutlari[i].OrderBy(e => e.zIndex).ToList() :
-                sortedLayout.Any() ? sortedLayout :
+                genelLayout.Any() ? genelLayout.OrderBy(e => e.zIndex).ToList() :
                 new List<LayoutEl>();
-
-            /*float editorW = buyuk ? (210f * 3.78f) : (99.1f * 3.78f);
-            float editorH = buyuk ? (99f * 3.78f) : (38.1f * 3.78f);
-            float pdfW = buyuk ? (210f * 2.8346f) : (99.1f * 2.8346f);
-            float pdfH = buyuk ? (99f * 2.8346f) : (38.1f * 2.8346f);
-            float scaleX = pdfW / editorW;
-            float scaleY = pdfH / editorH;*/
-            float scaleX = 2.8346f / 3.78f; // = 0.75
-            float scaleY = 2.8346f / 3.78f; // = 0.75
-
 
             void EtiketIcerik(IContainer container, int koliNo, int adet, byte[] foto)
             {
                 var koliLayout = GetKoliLayout(koliNo);
 
-                if (koliLayout.Any())
+                if (!koliLayout.Any())
                 {
-                    container.Layers(layers =>
-                    {
-                        layers.PrimaryLayer().Background("#FFFFFF");
-
-                        foreach (var el in koliLayout)
-                        {
-                            var elCopy = el;
-                            float ex = elCopy.x * scaleX;
-                            float ey = elCopy.y * scaleY;
-                            float ew = elCopy.w * scaleX;
-                            float eh = elCopy.h * scaleY;
-                            float fs = Math.Max(4f, elCopy.fontSize * scaleX);
-
-                            if (elCopy.type == "text")
-                            {
-                                var txt = GetTextValue(elCopy.text, model, koliNo, adet);
-                                var bold = elCopy.fontWeight == "bold";
-                                var italic = elCopy.fontStyle == "italic";
-                                layers.Layer()
-                                    .PaddingLeft(ex).PaddingTop(ey)
-                                    .Width(ew)
-                                    .Text(t =>
-                                    {
-                                        var span = t.Span(txt).FontSize(fs);
-                                        if (bold) span.Bold();
-                                        if (italic) span.Italic();
-                                    });
-                            }
-                            else if (elCopy.type == "logo" && logoBytes != null)
-                            {
-                                layers.Layer()
-                                    .PaddingLeft(ex).PaddingTop(ey)
-                                    .Width(ew).Height(eh)
-                                    .Image(logoBytes).FitArea();
-                            }
-                            else if (elCopy.type == "foto" && foto != null)
-                            {
-                                layers.Layer()
-                                    .PaddingLeft(ex).PaddingTop(ey)
-                                    .Width(ew).Height(eh)
-                                    .Image(foto).FitArea();
-                            }
-                        }
-                    });
-                }
-                else
-                {
+                    // Varsayılan layout
                     container.Column(col =>
                     {
                         if (logoBytes != null)
@@ -184,7 +120,81 @@ namespace PekMekanikEtiket.Controllers
                         col.Item().AlignCenter().Text(Label("koli", model.Dil) + " " + koliNo + "/" + model.KoliSayisi).FontSize(fs).Bold();
                         col.Item().AlignCenter().Text(Label("tarih", model.Dil) + " " + model.SiparisNo).FontSize(fs).Bold();
                     });
+                    return;
                 }
+
+                // Her elemanı Translate ile doğru konuma yerleştir
+                container.Background("#FFFFFF").Layers(layers =>
+                {
+                    layers.PrimaryLayer(); // boş primary layer şart
+
+                    foreach (var el in koliLayout)
+                    {
+                        float ex = el.x * PX_TO_PT;
+                        float ey = el.y * PX_TO_PT;
+                        float ew = Math.Max(2f, el.w * PX_TO_PT);
+                        float eh = Math.Max(2f, el.h * PX_TO_PT);
+                        float fs = Math.Max(4f, el.fontSize * PX_TO_PT);
+
+
+                        if (el.type == "text")
+                        {
+                            var txt = GetTextValue(el.text, model, koliNo, adet);
+                            if (string.IsNullOrWhiteSpace(txt)) continue;
+                            bool bold = el.fontWeight == "bold";
+                            bool italic = el.fontStyle == "italic";
+
+                            var layer = layers.Layer()
+                                .TranslateX(ex)
+                                .TranslateY(ey)
+                                .Width(ew)
+                                .Height(eh)
+                                .AlignMiddle();
+
+                            if (el.textAlign == "center")
+                                layer.AlignCenter().Text(t =>
+                                {
+                                    t.DefaultTextStyle(s => { s = s.FontSize(fs); if (bold) s = s.Bold(); if (italic) s = s.Italic(); return s; });
+                                    t.Span(txt);
+                                });
+                            else if (el.textAlign == "right")
+                                layer.AlignRight().Text(t =>
+                                {
+                                    t.DefaultTextStyle(s => { s = s.FontSize(fs); if (bold) s = s.Bold(); if (italic) s = s.Italic(); return s; });
+                                    t.Span(txt);
+                                });
+                            else
+                                layer.AlignLeft().Text(t =>
+                                {
+                                    t.DefaultTextStyle(s => { s = s.FontSize(fs); if (bold) s = s.Bold(); if (italic) s = s.Italic(); return s; });
+                                    t.Span(txt);
+                                });
+                        }
+
+
+
+                        else if (el.type == "logo" && logoBytes != null)
+                        {
+                            layers.Layer()
+                                .TranslateX(ex)
+                                .TranslateY(ey)
+                                .Width(ew)
+                                .Height(eh)
+                                .Image(logoBytes)
+                                .FitArea();
+                        }
+                        else if (el.type == "foto" && foto != null)
+                        {
+                            layers.Layer()
+                                .TranslateX(ex)
+                                .TranslateY(ey)
+                                .Width(ew)
+                                .Height(eh)
+                                .Image(foto)
+                                .FitArea();
+                        }
+                    }
+                });
             }
 
             return Document.Create(container =>
@@ -204,15 +214,18 @@ namespace PekMekanikEtiket.Controllers
                                 int adet = GetAdet(model, i);
                                 byte[] foto = GetFoto(i);
                                 int idx = i;
-                                col.Item().Height(etiketH).Element(c => EtiketIcerik(c, idx, adet, foto));
+                                col.Item().Height(etiketHpt).Element(c => EtiketIcerik(c, idx, adet, foto));
                             }
                         });
                     }
                     else
                     {
+                        float padTopBot = 15.15f * 2.8346f;
+                        float padLR = 5.9f * 2.8346f;
+
                         page.Content()
-                            .PaddingTop(42.9f).PaddingBottom(42.9f)
-                            .PaddingLeft(16.7f).PaddingRight(16.7f)
+                            .PaddingTop(padTopBot).PaddingBottom(padTopBot)
+                            .PaddingLeft(padLR).PaddingRight(padLR)
                             .Grid(grid =>
                             {
                                 grid.Columns(2);
@@ -223,23 +236,13 @@ namespace PekMekanikEtiket.Controllers
                                     int adet = GetAdet(model, i);
                                     byte[] foto = GetFoto(i);
                                     int idx = i;
-                                    grid.Item().Height(etiketH).Element(c => EtiketIcerik(c, idx, adet, foto));
+                                    grid.Item().Height(etiketHpt).Element(c => EtiketIcerik(c, idx, adet, foto));
                                 }
                             });
                     }
                 });
             }).GeneratePdf();
         }
-
-
-
-
-
-
-
-
-
-
 
         private string GetTextValue(string text, EtiketModel model, int i, int adet) =>
             (text ?? "")
@@ -251,8 +254,7 @@ namespace PekMekanikEtiket.Controllers
 
         private int GetAdet(EtiketModel model, int i) =>
             model.KoliAdetleri != null && model.KoliAdetleri.Count >= i
-                ? model.KoliAdetleri[i - 1]
-                : model.Adet;
+                ? model.KoliAdetleri[i - 1] : model.Adet;
 
         private string Label(string alan, string dil) => (alan, dil) switch
         {
@@ -272,7 +274,7 @@ namespace PekMekanikEtiket.Controllers
                 "parcaadi" => "Parça Adı:",
                 "adet" => "Adet:",
                 "koli" => "Koli:",
-                "tarih" => "Sipariş No",
+                "tarih" => "Sipariş No:",
                 _ => alan
             }
         };
@@ -293,4 +295,3 @@ namespace PekMekanikEtiket.Controllers
         public int zIndex { get; set; }
     }
 }
-

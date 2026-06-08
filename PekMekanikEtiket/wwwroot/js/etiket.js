@@ -11,7 +11,7 @@ let currentLayout = null; // geriye dönük uyumluluk
 // FORM YARDIMCILARI
 // =============================================
 document.getElementById("koliSayisi").addEventListener("input", guncelleKoliGrid);
-
+document.getElementById("adet").addEventListener("input", guncelleKoliGrid)
 function fotografSecimDegisti() {
     var s = document.getElementById("fotografSecim").value;
     document.getElementById("ayniYukle").style.display = s === "ayni" ? "block" : "none";
@@ -20,16 +20,23 @@ function fotografSecimDegisti() {
 
 function guncelleKoliGrid() {
     var k = parseInt(document.getElementById("koliSayisi").value);
-    var a = document.getElementById("adet").value;
+    var toplamAdet = parseInt(document.getElementById("adet").value) || 0;
     var fs = document.getElementById("fotografSecim").value;
     var alan = document.getElementById("koliGrid");
     alan.innerHTML = "";
     if (isNaN(k) || k <= 0) return;
+
+    // Her koliye düşen adet
+    var koliAdeti = Math.floor(toplamAdet / k);
+    var kalan = toplamAdet - (koliAdeti * k);
+
     var html = "<table class='table table-bordered table-sm'><thead><tr><th>Koli No</th><th>Adet</th>";
     if (fs === "ayri") html += "<th>Fotoğraf</th>";
     html += "</tr></thead><tbody>";
     for (var i = 1; i <= k; i++) {
-        html += "<tr><td>" + i + "</td><td><input type='number' name='KoliAdetleri' value='" + a + "' class='form-control form-control-sm'/></td>";
+        // Kalan adet son koliye eklenir
+        var buKoliAdet = (i === k) ? koliAdeti + kalan : koliAdeti;
+        html += "<tr><td>" + i + "</td><td><input type='number' name='KoliAdetleri' value='" + buKoliAdet + "' class='form-control form-control-sm'/></td>";
         if (fs === "ayri") html += "<td><input type='file' id='koliResim_" + i + "' accept='image/*' class='form-control form-control-sm'/></td>";
         html += "</tr>";
     }
@@ -142,23 +149,43 @@ function yazdir() {
     win.focus();
     setTimeout(function () { win.print(); }, 500);
 }
-
 function pdfIndir() {
     hazirlaFormVerisi().then(function (fd) {
-        var form = document.createElement("form");
-        form.method = "POST";
-        form.action = "/Etiket/PdfIndir";
-        form.target = "_blank";
-        fd.forEach(function (value, key) {
-            var input = document.createElement("input");
-            input.type = "hidden";
-            input.name = key;
-            input.value = value;
-            form.appendChild(input);
-        });
-        document.body.appendChild(form);
-        form.submit();
-        document.body.removeChild(form);
+        fetch("/Etiket/OnizleVeri", { method: "POST", body: fd })
+            .then(function (r) { return r.text(); })
+            .then(function (html) {
+                var win = window.open("", "_blank");
+                var stil =
+                    "body{margin:0}" +
+                    "@page{size:A4;margin:0}" +
+                    ".prev-sayfa{width:210mm;margin:0;background:white;page-break-after:always;box-sizing:border-box;}" +
+                    ".kucuk-grid{padding:15.15mm 5.9mm;display:grid;grid-template-columns:99.1mm 99.1mm;grid-auto-rows:38.1mm;gap:0}" +
+                    ".buyuk-grid{padding:0;display:grid;grid-template-columns:210mm;grid-auto-rows:99mm;gap:0}" +
+                    ".etiket-kutu{position:relative;overflow:hidden;box-sizing:border-box}" +
+                    ".etiket-el{position:absolute;overflow:hidden;display:flex;align-items:center;box-sizing:border-box}" +
+                    ".etiket-el img{width:100%;height:100%;object-fit:contain}" +
+                    ".etiket-el span{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.2}" +
+                    ".varsayilan-icerik{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:2mm;box-sizing:border-box}" +
+                    ".varsayilan-icerik img{max-height:22mm;max-width:170mm;object-fit:contain;margin-bottom:1mm}" +
+                    ".sline{font-size:7.4pt;font-weight:700;text-align:center;line-height:1.3;white-space:nowrap}";
+
+                win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>${stil}</style>
+</head>
+<body>
+${html}
+<script>
+  window.onload = function() {
+    window.print();
+  };
+<\/script>
+</body>
+</html>`);
+                win.document.close();
+            });
     });
 }
 

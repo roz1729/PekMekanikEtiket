@@ -21,17 +21,31 @@
     }
 
     bool buyuk = Model.EtiketTipi == "Büyük";
-
-    // px -> mm dönüşüm sabiti (editör scale = 3.78 px/mm)
     const double PX_TO_MM = 1.0 / 3.78;
-    // px font-size -> pt: 1px = 0.75pt
     const double PX_TO_PT = 0.75;
 
-    // Layout parse
-    List<JsonElement> layout = new();
+    // Genel layout (geriye dönük uyumluluk)
+    List<JsonElement> genelLayout = new();
     if (!string.IsNullOrEmpty(Model.LayoutJson)) {
-        try { layout = JsonSerializer.Deserialize<List<JsonElement>>(Model.LayoutJson) ?? new(); } catch { }
+        try { genelLayout = JsonSerializer.Deserialize<List<JsonElement>>(Model.LayoutJson) ?? new(); } catch { }
     }
+
+    // Her koli için ayrı layout
+    Dictionary<int, List<JsonElement>> koliLayoutlari = new();
+    if (!string.IsNullOrEmpty(Model.KoliLayoutlariJson)) {
+        try {
+            var raw = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(Model.KoliLayoutlariJson);
+            if (raw != null)
+                foreach (var kv in raw)
+                    if (int.TryParse(kv.Key, out int k))
+                        koliLayoutlari[k] = JsonSerializer.Deserialize<List<JsonElement>>(kv.Value.GetRawText()) ?? new();
+        } catch { }
+    }
+
+    List<JsonElement> GetKoliLayout(int i) =>
+        koliLayoutlari.ContainsKey(i) ? koliLayoutlari[i] :
+        genelLayout.Any() ? genelLayout :
+        new List<JsonElement>();
 }
 
 <style>
@@ -57,25 +71,15 @@
         grid-auto-rows: 99mm;
         gap: 0;
     }
-    .etiket-kutu {
-        position: relative;
-        overflow: hidden;
-        box-sizing: border-box;
-    }
+    .etiket-kutu { position: relative; overflow: hidden; box-sizing: border-box; }
     .etiket-el {
-        position: absolute;
-        overflow: hidden;
-        display: flex;
-        align-items: center;
-        box-sizing: border-box;
+        position: absolute; overflow: hidden;
+        display: flex; align-items: center; box-sizing: border-box;
     }
     .etiket-el img { width: 100%; height: 100%; object-fit: contain; }
     .etiket-el span {
-        width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        line-height: 1.2;
+        width: 100%; overflow: hidden; text-overflow: ellipsis;
+        white-space: nowrap; line-height: 1.2;
     }
     .varsayilan-icerik {
         width: 100%; height: 100%;
@@ -120,55 +124,49 @@
                 int koliNo = i;
                 double w = buyuk ? 210.0 : 99.1;
                 double h = buyuk ? 99.0 : 38.1;
+                var koliLayout = GetKoliLayout(koliNo);
 
-                <div class="etiket-kutu" style="width:@(w)mm;height:@(h)mm;" data-koli="@i">
-                    @if (layout.Any())
+                <div class="etiket-kutu" style="width:@(w)mm;height:@(h)mm;">
+                    @if (koliLayout.Any())
                     {
-                        @foreach (JsonElement el in layout.OrderBy(e => e.TryGetProperty("zIndex", out var z) ? z.GetInt32() : 0))
+                        @foreach (JsonElement el in koliLayout.OrderBy(e => e.TryGetProperty("zIndex", out var z) ? z.GetInt32() : 0))
                         {
                             string type = el.GetProperty("type").GetString();
-                            double x = el.GetProperty("x").GetDouble();
-                            double y = el.GetProperty("y").GetDouble();
-                            double ew = el.GetProperty("w").GetDouble();
-                            double eh = el.GetProperty("h").GetDouble();
+                            double x    = el.GetProperty("x").GetDouble();
+                            double y    = el.GetProperty("y").GetDouble();
+                            double ew   = el.GetProperty("w").GetDouble();
+                            double eh   = el.GetProperty("h").GetDouble();
                             double fsPx = el.GetProperty("fontSize").GetDouble();
-                            string fw = el.TryGetProperty("fontWeight", out var fwp) ? fwp.GetString() : "normal";
-                            string fi = el.TryGetProperty("fontStyle", out var fip) ? fip.GetString() : "normal";
-                            string ta = el.TryGetProperty("textAlign", out var tap) ? tap.GetString() : "left";
-                            string txt = el.TryGetProperty("text", out var txtp) ? txtp.GetString() : "";
+                            string fw   = el.TryGetProperty("fontWeight", out var fwp) ? fwp.GetString() : "normal";
+                            string fi   = el.TryGetProperty("fontStyle",  out var fip) ? fip.GetString() : "normal";
+                            string ta   = el.TryGetProperty("textAlign",  out var tap) ? tap.GetString() : "left";
+                            string txt  = el.TryGetProperty("text",       out var txtp) ? txtp.GetString() : "";
 
-                            // DÜZELTİLDİ: px -> mm dönüşümü (SCALE = 3.78 px/mm)
-                            double xmm = x * PX_TO_MM;
-                            double ymm = y * PX_TO_MM;
-                            double wmm = ew * PX_TO_MM;
-                            double hmm = eh * PX_TO_MM;
-
-                            // DÜZELTİLDİ: font-size px -> pt (1px = 0.75pt)
+                            double xmm  = x  * PX_TO_MM;
+                            double ymm  = y  * PX_TO_MM;
+                            double wmm  = ew * PX_TO_MM;
+                            double hmm  = eh * PX_TO_MM;
                             double fsPt = fsPx * PX_TO_PT;
 
                             txt = txt
                                 .Replace("{parcakodu}", Model.ParcaKodu)
-                                .Replace("{parcaadi}", Model.ParcaAdi)
-                                .Replace("{adet}", adet.ToString())
-                                .Replace("{koli}", koliNo + "/" + Model.KoliSayisi)
-                                .Replace("{tarih}", Model.SiparisNo);
-                               
+                                .Replace("{parcaadi}",  Model.ParcaAdi)
+                                .Replace("{adet}",      adet.ToString())
+                                .Replace("{koli}",      koliNo + "/" + Model.KoliSayisi)
+                                .Replace("{tarih}",     Model.SiparisNo);
 
-                            // Eleman etiket sınırı dışına taşıyorsa gösterme
                             bool gorunur = (xmm < w) && (ymm < h) && (xmm + wmm > 0) && (ymm + hmm > 0);
-
                             if (gorunur)
                             {
-                                // Kenar taşmasını kırp
-                                double gxmm = Math.Max(0, xmm);
-                                double gymm = Math.Max(0, ymm);
-                                double gwmm = Math.Min(wmm, w - gxmm);
-                                double ghmm = Math.Min(hmm, h - gymm);
+                                double gx = Math.Max(0, xmm);
+                                double gy = Math.Max(0, ymm);
+                                double gw = Math.Min(wmm, w - gx);
+                                double gh = Math.Min(hmm, h - gy);
 
-                                <div class="etiket-el" style="left:@(gxmm.ToString("F3", System.Globalization.CultureInfo.InvariantCulture))mm;top:@(gymm.ToString("F3", System.Globalization.CultureInfo.InvariantCulture))mm;width:@(gwmm.ToString("F3", System.Globalization.CultureInfo.InvariantCulture))mm;height:@(ghmm.ToString("F3", System.Globalization.CultureInfo.InvariantCulture))mm;">
+                                <div class="etiket-el" style="left:@(gx.ToString("F3",System.Globalization.CultureInfo.InvariantCulture))mm;top:@(gy.ToString("F3",System.Globalization.CultureInfo.InvariantCulture))mm;width:@(gw.ToString("F3",System.Globalization.CultureInfo.InvariantCulture))mm;height:@(gh.ToString("F3",System.Globalization.CultureInfo.InvariantCulture))mm;">
                                     @if (type == "text")
                                     {
-                                        <span style="font-size:@(fsPt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))pt;font-weight:@fw;font-style:@fi;text-align:@ta;display:block;">@txt</span>
+                                        <span style="font-size:@(fsPt.ToString("F2",System.Globalization.CultureInfo.InvariantCulture))pt;font-weight:@fw;font-style:@fi;text-align:@ta;display:block;">@txt</span>
                                     }
                                     else if (type == "logo" && Model.LogoGoster)
                                     {
@@ -176,7 +174,7 @@
                                     }
                                     else if (type == "foto" && gorsel != null)
                                     {
-                                        <img src="@gorsel" alt="Ürün Fotoğrafı" />
+                                        <img src="@gorsel" alt="Fotoğraf" />
                                     }
                                 </div>
                             }
@@ -186,12 +184,12 @@
                     {
                         <div class="varsayilan-icerik">
                             @if (Model.LogoGoster) { <img src="/logo2.jpeg" alt="Logo" /> }
-                            @if (gorsel != null) { <img src="@gorsel" alt="Ürün Fotoğrafı" /> }
+                            @if (gorsel != null) { <img src="@gorsel" alt="Fotoğraf" /> }
                             <div class="sline">@L("parcakodu") @Model.ParcaKodu</div>
                             <div class="sline">@L("parcaadi") @Model.ParcaAdi</div>
                             <div class="sline">@L("adet") @adet</div>
                             <div class="sline">@L("koli") @koliNo / @Model.KoliSayisi</div>
-                                <div class="sline">@L("tarih") @Model.SiparisNo</div>
+                            <div class="sline">@L("tarih") @Model.SiparisNo</div>
                         </div>
                     }
                 </div>
