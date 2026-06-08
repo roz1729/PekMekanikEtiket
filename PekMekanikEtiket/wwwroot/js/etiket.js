@@ -72,11 +72,18 @@ function hazirlaFormVerisi() {
 }
 
 function formDegerleriniAl() {
+    // Her kolinin adetini tablodaki inputlardan oku
+    var koliAdetleri = [];
+    document.querySelectorAll('input[name="KoliAdetleri"]').forEach(function (inp) {
+        koliAdetleri.push(parseInt(inp.value) || 0);
+    });
+
     return {
         parcaKodu: document.querySelector('[name="ParcaKodu"]').value || '',
         parcaAdi: document.querySelector('[name="ParcaAdi"]').value || '',
         adet: document.querySelector('[name="Adet"]').value || '1',
         koliSayisi: parseInt(document.getElementById("koliSayisi").value) || 1,
+        koliAdetleri: koliAdetleri,
         tarih: (function () {
             var t = document.querySelector('[name="Tarih"]').value;
             if (!t) return new Date().toLocaleDateString('tr-TR');
@@ -87,10 +94,15 @@ function formDegerleriniAl() {
 }
 
 function metniDoldur(text, deger, koliNo, koliSayisi) {
+    // O kolinin adedini al, yoksa toplam adedi kullan
+    var koliAdet = (deger.koliAdetleri && deger.koliAdetleri[koliNo - 1] !== undefined)
+        ? deger.koliAdetleri[koliNo - 1]
+        : deger.adet;
+
     return (text || '')
         .replace(/{parcakodu}/g, deger.parcaKodu)
         .replace(/{parcaadi}/g, deger.parcaAdi)
-        .replace(/{adet}/g, deger.adet)
+        .replace(/{adet}/g, koliAdet)
         .replace(/{koli}/g, koliNo + '/' + koliSayisi)
         .replace(/{tarih}/g, deger.tarih);
 }
