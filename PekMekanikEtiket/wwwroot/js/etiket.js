@@ -19,7 +19,7 @@ function guncelleKoliGrid() {
     var k = parseInt(document.getElementById("koliSayisi").value);
     var toplamAdet = parseInt(document.getElementById("adet").value);
     var fs = document.getElementById("fotografSecim").value;
-    var alan = document.getElementById("koliGrid");
+    var alan = document.getElementById("koliGrid");  
     alan.innerHTML = "";
     if (isNaN(k) || k <= 0) return;
     if (isNaN(toplamAdet) || toplamAdet <= 0) return; // adet girilmemişse dur
